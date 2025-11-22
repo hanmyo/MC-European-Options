@@ -4,7 +4,8 @@ import argparse
 import csv
 from pathlib import Path
 from typing import Sequence
-from diagnostics import convergence_study, ConvergenceResult
+from diagnostics import convergence_study
+from useful_classes import EuropeanOption, ConvergenceResult
 from bs_formula import bs_price 
 
 
@@ -149,23 +150,11 @@ def save_results_to_csv(
 
 def main() -> None: 
     args = parse_args()
-
-    bs_ref = bs_price(
-        S0 = args.S0,
-        K = args.K,
-        r = args.r,
-        sigma = args.sigma,
-        T = args.T,
-        option_type = args.option_type,
-    )
+    option: EuropeanOption = EuropeanOption(args.S0, args.K, args.r, args.sigma, args.T, args.option_type)
+    bs_ref = bs_price(option)
 
     results = convergence_study(
-        S0 = args.S0,
-        K = args.K,
-        r = args.r,
-        sigma = args.sigma,
-        T = args.T,
-        option_type = args.option_type,
+        option = option,
         n_paths_list = args.n_paths_list,
         use_antithetic = args.antithetic,
         alpha = args.alpha,

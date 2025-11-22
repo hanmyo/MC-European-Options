@@ -1,16 +1,11 @@
 from typing import Literal, Optional, Tuple
 import numpy as np
-
-OptionType = Literal["call", "put"]
+from mc_engine import compute_terminal_prices
+from useful_classes import EuropeanOption
 
 def mc_european_price_antithetic(
-        S0: float, 
-        K: float,
-        r: float, 
-        sigma: float, 
-        T: float, 
+        option: EuropeanOption,
         n_paths: int, 
-        option_type : OptionType = "call",
         rng: Optional[np.random.Generator] = None, 
 ) -> Tuple[float, float]:
 
@@ -21,23 +16,20 @@ def mc_european_price_antithetic(
         raise ValueError("n_paths must be even for antithetic variates.")
     
     m = n_paths // 2
-    Z = rng.standard_normal(m)
-    Z_pair = np.concatenate([Z, -Z])
+    Z: np.ndarray = rng.standard_normal(m)
+    Z_pair: np.ndarray = np.concatenate([Z, -Z])
 
-    drift = (r - 0.5 * sigma ** 2) * T
-    diffusion_scale = sigma * np.sqrt(T)
+    ST: np.ndarray = compute_terminal_prices(option, Z_pair)
 
-    ST = S0 * np.exp(drift + diffusion_scale * Z_pair)
+    if option.option_type == "call":
+        payoffs = np.maximum(ST-option.K, 0.0)
 
-    if option_type == "call":
-        payoffs = np.maximum(ST-K, 0.0)
-
-    elif option_type == "put":
-        payoffs = np.maximum(K - ST, 0.0)
+    elif option.option_type == "put":
+        payoffs = np.maximum(option.K - ST, 0.0)
     else:
         raise ValueError("option_type must be 'call or 'put' ")
 
-    discount_factor = np.exp(-r * T)
+    discount_factor = np.exp(-option.r * option.T)
     discounted_payoffs = discount_factor * payoffs
 
     pair_means = 0.5 * (

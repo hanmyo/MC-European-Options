@@ -1,14 +1,22 @@
 from typing import Optional, Sequence, Tuple, Literal
-
 import numpy as np
+from useful_classes import ConvergenceResult, EuropeanOption
 
 OptionType = Literal["call", "put"]
 
+def compute_terminal_prices(
+        option: EuropeanOption,
+        Z: np.ndarray,
+) -> np.ndarray:
+    
+    drift = (option.r-0.5 * option.sigma ** 2) * option.T 
+    diffusion = option.sigma * np.sqrt(option.T) * Z 
+    ST = option.S0 * np.exp(drift + diffusion)
+
+    return ST    
+
 def generate_terminal_prices(
-        S0: float,
-        r: float,
-        sigma: float,
-        T: float, 
+        option: EuropeanOption,
         n_paths: int, 
         rng: Optional[np.random.Generator] = None,
 ) -> np.ndarray:
@@ -16,68 +24,48 @@ def generate_terminal_prices(
     if rng is None:
         rng = np.random.default_rng()
     
-    if T < 0:
+    if option.T < 0:
         raise ValueError("Time to maturity T must be non-negative.")
     
-    if T == 0:
+    if option.T == 0:
         return np.full(n_paths, S0, dtype="float")
-    
-    Z = rng.standard_normal(n_paths)
 
-    drift = (r-0.5 * sigma ** 2) * T
-    diffusion = sigma * np.sqrt(T) * Z
+    Z: np.ndarray = rng.standard_normal(n_paths)
 
-    ST = S0 * np.exp(drift+diffusion)
-
-    return ST
+    return compute_terminal_prices(option, Z)
 
 def mc_european_price(
-        
-    S0: float, 
-    K: float, 
-    r: float, 
-    sigma: float,
-    T: float, 
+    option: EuropeanOption,
     n_paths: int,
-    option_type: OptionType = "call",
     rng: Optional[np.random.Generator] = None,
 ) -> Tuple[float, float]:
+    
     if n_paths <= 0:
         raise ValueError("n_paths must be positive.")
     
-    ST: np.ndarray = generate_terminal_prices(
-        S0 = S0,
-        r = r, 
-        sigma = sigma,
-        T = T, 
-        n_paths = n_paths, 
-        rng = rng,
-    )
+    ST: np.ndarray = generate_terminal_prices(  option, n_paths = n_paths, rng = rng,)
 
-    if option_type == "call":
-        payoffs: np.ndarray = np.maximum(ST - K, 0.0)
-    elif option_type == "put":
-        payoffs: np.ndarray = np.maximum(K-ST, 0.0)
+    if option.option_type == "call":
+        payoffs: np.ndarray = np.maximum(ST - option.K, 0.0)
+    elif option.option_type == "put":
+        payoffs: np.ndarray = np.maximum(option.K - ST, 0.0)
     else:
-        raise ValueRoor("option_type must be either 'call' or 'put' ")
+        raise ValueError("option_type must be either 'call' or 'put' ")
     
-    discounted_payoffs: np.ndarray = np.exp(-r * T) * payoffs
+    discounted_payoffs: np.ndarray = np.exp(-option.r * option.T) * payoffs
 
     price_estimate: float = float(discounted_payoffs.mean())
     price_std: float = float(discounted_payoffs.std(ddof = 1))
 
     return price_estimate, price_std
 
-
+# function to simulate for different n_s
 def mc_european_price_for_ns(
-        S0: float,
-        K: float, 
-        r: float,
-        sigma: float, 
-        T: float,
+        
+        option: EuropeanOption,
         n_paths_list: Sequence[int],
-        option_type: OptionType = "call",
         seed: int = 42,
+        
 ) -> Sequence[Tuple[int, float, float]]:
     
     results: list[Tuple[int, float, float]] = []
@@ -87,16 +75,7 @@ def mc_european_price_for_ns(
             raise ValueError("All n_paths values must be positive.")
         
         rng = np.random.default_rng(seed + i)
-        price_estimate, price_std = mc_european_price(
-            S0 = S0,
-            K = K,
-            r = r, 
-            sigma = sigma, 
-            T = T, 
-            n_paths = N,
-            option_type = option_type,
-            rng = rng,
-        )
+        price_estimate, price_std = mc_european_price(option, n_paths = N, rng = rng)
         results.append((N, price_estimate, price_std))
 
     return results
@@ -109,22 +88,14 @@ if __name__ == "__main__":
     r: float = 0.05
     sigma: float = 0.2
     T: float = 1.0
-    n_paths: int = 100_000
-
+    n_paths: int = 100_0000
     rng = np.random.default_rng(123)
+    option: EuropeanOption = EuropeanOption(S0, K, r, sigma, T)
+    
 
-    mc_price, mc_std = mc_european_price(
-        S0 = S0,
-        K = K, 
-        r = r, 
-        sigma = sigma, 
-        T = T, 
-        n_paths = n_paths,
-        option_type = "call",
-        rng = rng,
-    )
+    mc_price, mc_std = mc_european_price(option,n_paths = n_paths, rng = rng,)
 
-    bs: float = bs_price(S0, K, r, sigma, T, option_type= "call")
+    bs: float = bs_price(option)
 
     print(f"Black-Scholes price:  {bs:.4f}")
     print(f"MC estimate:          {mc_price:.4f}")

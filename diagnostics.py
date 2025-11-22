@@ -7,6 +7,7 @@ from typing import Tuple, Iterable, List, Literal, Optional
 from bs_formula import bs_price
 from mc_engine import mc_european_price
 from variance_reduction import mc_european_price_antithetic
+from useful_classes import ConvergenceResult, EuropeanOption
 
 import numpy as np
 from scipy.stats import norm 
@@ -26,22 +27,9 @@ def confidence_interval(
     upper = mean + half_width
     return lower, upper, half_width
 
-@dataclass
-class ConvergenceResult:
-    n_paths: int
-    estimate: float
-    ci_lower: float
-    ci_upper: float
-    ci_half_width: float 
-    abs_error_vs_bs: float 
 
 def convergence_study(
-        S0: float,
-        K: float,
-        r: float, 
-        sigma: float, 
-        T: float,
-        option_type: Literal["call", "put"],
+        option: EuropeanOption,
         n_paths_list:Iterable[int],
         use_antithetic: bool = False,
         alpha: float = 0.05,
@@ -53,30 +41,16 @@ def convergence_study(
     else:
         rng = np.random.default_rng()
 
-    true_price = bs_price(S0, K, r, sigma, T, option_type=option_type)
+    true_price = bs_price(option)
 
     results: List[ConvergenceResult] = []
 
     for n_paths in n_paths_list:
         if use_antithetic:
-            estimate, sample_std = mc_european_price_antithetic(S0 = S0,
-                                                                K = K,
-                                                                r = r,
-                                                                sigma = sigma,
-                                                                T = T,
-                                                                n_paths = n_paths,
-                                                                option_type = option_type,
-                                                                rng = rng,)
+            estimate, sample_std = mc_european_price_antithetic(option, n_paths = n_paths, rng = rng,)
 
         else:
-            estimate, sample_std = mc_european_price(S0 = S0,
-                                                   K = K,
-                                                   r = r,
-                                                   sigma = sigma,
-                                                   T = T,
-                                                   n_paths = n_paths,
-                                                   option_type = option_type,
-                                                   rng = rng,)
+            estimate, sample_std = mc_european_price(option, n_paths = n_paths, rng = rng,)
 
         ci_lower, ci_upper, half_width = confidence_interval(
             mean = estimate,
@@ -102,15 +76,11 @@ def convergence_study(
 
 if __name__ == "__main__":
     S0, K, r, sigma, T = 100.0, 100.0, 0.05, 0.2, 1.0
+    option = EuropeanOption(S0, K, r, sigma, T)
     n_paths_list = [1_000, 5_000, 10_000, 50_000, 100_000]
 
     results_plain = convergence_study(
-        S0=S0,
-        K=K,
-        r=r,
-        sigma=sigma,
-        T=T,
-        option_type="call",
+        option = option,
         n_paths_list=n_paths_list,
         use_antithetic=False,
         alpha=0.05,
